@@ -158,6 +158,22 @@
       "en_stock": true,
       "cantidad_disponible": 2,
       "editorial": "Harcourt, Brace, Jovanovich"
+    },
+    {
+      "isbn": "9780679723165",
+      "titulo": "Lolita",
+      "autor": {
+        "nombre": "Vladimir Nabokov",
+        "nacionalidad": "Ruso"
+      },
+      "genero": [
+        "Ficción"
+      ],
+      "año_publicacion": 1989,
+      "precio": 1500.0,
+      "en_stock": true,
+      "cantidad_disponible": 1,
+      "editorial": "Vintage International"
     }
   ]
 }

@@ -5,7 +5,8 @@ función que, dada la petición, devuelve la respuesta. Así las pruebas son
 rápidas y no dependen de que Open Library esté en línea.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -23,6 +24,7 @@ RESPUESTAS: dict[str, dict[str, Any]] = {
         "works": [{"key": "/works/OL274505W"}],
         "publishers": ["Vintage Español"],
         "publish_date": "May 2009",
+        "covers": [-1, 8231856],  # -1 = portada eliminada, se ignora
     },
     "/works/OL274505W.json": {
         "title": "Cien años de soledad",
@@ -77,6 +79,7 @@ def test_encuentra_libro() -> None:
     assert datos.generos == ["Fiction", "Magic realism", "Colombia"]  # máximo 3, de la obra
     assert datos.año_publicacion == 2009
     assert datos.editorial == "Vintage Español"
+    assert datos.id_portada == 8231856
 
 
 def test_autores_desde_la_obra() -> None:
@@ -137,3 +140,66 @@ def test_extraer_año(fecha: str, esperado: int | None) -> None:
 
 def test_normalizar_isbn() -> None:
     assert buscador.normalizar_isbn(" 978-607-07-1234-x ") == "978607071234X"
+
+
+# ── Descarga de portadas por streaming ─────────────────────────────────────
+
+# 200 KB: más grande que un trozo (64 KB), así la descarga llega en varias partes
+IMAGEN_FALSA = bytes(range(256)) * 800
+
+
+def transporte_portadas(peticion: httpx.Request) -> httpx.Response:
+    """Imita covers.openlibrary.org: redirige a archive.org, que entrega la imagen."""
+    if peticion.url.path == "/b/id/8231856-L.jpg":
+        return httpx.Response(302, headers={"Location": "https://archive.org/portada.jpg"})
+    if peticion.url.host == "archive.org":
+        return httpx.Response(200, content=IMAGEN_FALSA)
+    return httpx.Response(404)
+
+
+class CorteDeRed(httpx.SyncByteStream):
+    """Cuerpo de respuesta que envía un poco de datos y luego se corta."""
+
+    def __iter__(self) -> Iterator[bytes]:
+        yield b"x" * 1000
+        raise httpx.ReadError("se cortó la conexión")
+
+
+def test_descarga_portada(tmp_path: Path) -> None:
+    destino = tmp_path / "portadas" / "9780307474728.jpg"  # la carpeta aún no existe
+
+    ruta = buscador.descargar_portada(8231856, destino, httpx.MockTransport(transporte_portadas))
+
+    assert ruta == destino
+    assert destino.read_bytes() == IMAGEN_FALSA
+    assert not (tmp_path / "portadas" / "9780307474728.jpg.part").exists()
+
+
+def test_portada_inexistente_no_deja_archivos(tmp_path: Path) -> None:
+    destino = tmp_path / "404.jpg"
+
+    with pytest.raises(ServicioExternoError):
+        buscador.descargar_portada(1, destino, httpx.MockTransport(transporte_portadas))
+
+    assert list(tmp_path.iterdir()) == []  # ni la imagen ni el .part
+
+
+def test_corte_a_la_mitad_no_deja_archivos(tmp_path: Path) -> None:
+    transporte, peticiones = transporte_contando(
+        lambda peticion: httpx.Response(200, stream=CorteDeRed())
+    )
+    destino = tmp_path / "cortada.jpg"
+
+    with pytest.raises(ServicioExternoError):
+        buscador.descargar_portada(8231856, destino, transporte)
+
+    assert len(peticiones) == 2  # el corte de red se reintenta una vez
+    assert list(tmp_path.iterdir()) == []  # el archivo a medias se borró
+
+
+@pytest.mark.parametrize(
+    ("isbn", "esperado"),
+    [("978-0-307-47472-8", "9780307474728.jpg"), ("../x/1", "x1.jpg"), ("--", "portada.jpg")],
+)
+def test_nombre_archivo_portada(isbn: str, esperado: str) -> None:
+    assert buscador.nombre_archivo_portada(isbn) == esperado

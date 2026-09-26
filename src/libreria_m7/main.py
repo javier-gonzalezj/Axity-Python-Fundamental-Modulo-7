@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Final
 
 from libreria_m7.almacenamiento import cargar_datos, guardar_datos
+from libreria_m7.buscador import descargar_portada, nombre_archivo_portada
 from libreria_m7.captura import capturar_filtros, capturar_libro
 from libreria_m7.catalogo import agregar_libro
 from libreria_m7.excepciones import LibreriaError
@@ -93,19 +94,37 @@ def _opcion_filtrar(data: Libreria, carpeta_exportaciones: Path) -> None:
     print(f"\n✅ Resultado exportado a: {ruta_final}")
 
 
-def _opcion_agregar_libro(data: Libreria, ruta_json: Path) -> None:
-    """3. Captura un libro por consola, lo agrega y guarda."""
+def _opcion_agregar_libro(data: Libreria, ruta_json: Path, carpeta_portadas: Path) -> None:
+    """3. Captura un libro por consola, lo agrega, guarda y descarga su portada."""
     respaldo = list(data["libros"])
     try:
-        nuevo_libro = Libro.desde_dict(capturar_libro(data))
+        datos_libro, id_portada = capturar_libro(data)
+        nuevo_libro = Libro.desde_dict(datos_libro)
         agregar_libro(data, nuevo_libro)
     except LibreriaError as e:
         log.exception("Error al agregar un libro")
         print(f"❌ No se pudo agregar el libro: {e}")
         return
 
-    if _guardar(ruta_json, data, respaldo):
-        print(f"\n✅ '{nuevo_libro.titulo}' agregado correctamente.")
+    if not _guardar(ruta_json, data, respaldo):
+        return
+    print(f"\n✅ '{nuevo_libro.titulo}' agregado correctamente.")
+
+    if id_portada is not None:
+        _descargar_portada(id_portada, carpeta_portadas / nombre_archivo_portada(nuevo_libro.isbn))
+
+
+def _descargar_portada(id_portada: int, destino: Path) -> None:
+    """Descarga la portada. Si falla solo avisa: el libro ya quedó guardado."""
+    print("🖼️  Descargando portada...")
+    try:
+        with cronometro("Descargar portada"):
+            ruta = descargar_portada(id_portada, destino)
+    except LibreriaError as e:
+        log.exception("Error al descargar la portada")
+        print(f"⚠️  El libro se guardó, pero no su portada: {e}")
+        return
+    print(f"✅ Portada guardada en: {ruta}")
 
 
 def main() -> None:
@@ -114,6 +133,7 @@ def main() -> None:
     raiz_proyecto = Path(__file__).parent.parent.parent
     ruta_json = raiz_proyecto / "data" / "libreria.json"
     carpeta_exportaciones = ruta_json.parent / "exportaciones"
+    carpeta_portadas = ruta_json.parent / "portadas"
 
     configurar_logging(raiz_proyecto / "logs")
     log.info("Inicio del programa")
@@ -141,7 +161,7 @@ def main() -> None:
             case "2":
                 _opcion_importar_csv(data, ruta_json)
             case "3":
-                _opcion_agregar_libro(data, ruta_json)
+                _opcion_agregar_libro(data, ruta_json, carpeta_portadas)
             case "4":
                 mostrar_libreria(data, por_pagina=LIBROS_POR_PAGINA)
             case "0":

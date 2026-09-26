@@ -10,11 +10,15 @@ Usa la API REST de Open Library, que devuelve el JSON de cada objeto por su ruta
   /authors/OL4586796A.json  -> el *autor* (nombre)
 La edición solo trae la "clave" del autor, no su nombre; por eso hay que hacer
 una petición extra por autor.
+
+Las portadas están en otro servidor (covers.openlibrary.org) y se descargan
+por streaming con descargar_portada().
 """
 
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -26,7 +30,10 @@ from libreria_m7.utilidades import reintentar
 log = logging.getLogger(__name__)
 
 URL_BASE = "https://openlibrary.org"
+URL_PORTADAS = "https://covers.openlibrary.org"
 TIMEOUT_SEGUNDOS = 5
+TIMEOUT_DESCARGA = 15  # una imagen tarda más que un JSON
+TAMAÑO_TROZO = 64 * 1024  # 64 KB por trozo al descargar
 MAX_GENEROS = 3
 MAX_AUTORES = 3
 # Open Library pide identificar la aplicación. Si agregas un correo de contacto,
@@ -47,6 +54,7 @@ class DatosISBN(BaseModel):
     generos: list[str] = Field(default_factory=list)
     año_publicacion: int | None = None
     editorial: str = ""
+    id_portada: int | None = None  # identificador de la portada en covers.openlibrary.org
 
 
 def normalizar_isbn(isbn: str) -> str:
@@ -159,6 +167,76 @@ def buscar_por_isbn(isbn: str, transporte: httpx.BaseTransport | None = None) ->
         generos=generos[:MAX_GENEROS],
         año_publicacion=_extraer_año(edicion.get("publish_date", "")),
         editorial=next(iter(_nombres(edicion.get("publishers", []))), ""),
+        # "covers" es una lista de ids; Open Library usa -1 para portadas eliminadas
+        id_portada=next(
+            (c for c in edicion.get("covers", []) if isinstance(c, int) and c > 0), None
+        ),
     )
     log.info("Encontrado en Open Library: %s", datos.titulo)
     return datos
+
+
+def nombre_archivo_portada(isbn: str) -> str:
+    """Nombre de archivo seguro para la portada: '978-0-307-47472-8' -> '9780307474728.jpg'.
+
+    Solo deja letras y números, para que un ISBN mal escrito (con '/', por
+    ejemplo) no pueda crear rutas raras.
+    """
+    return f"{re.sub(r'[^0-9A-Za-z]', '', isbn) or 'portada'}.jpg"
+
+
+@reintentar(
+    intentos=2,
+    espera_inicial=0.5,
+    excepciones=(httpx.NetworkError, httpx.TimeoutException),
+)
+def _descargar_a_archivo(cliente: httpx.Client, ruta: str, archivo: Path) -> int:
+    """Descarga `ruta` por streaming y la escribe en `archivo`, trozo por trozo.
+
+    Devuelve los bytes escritos. Si se reintenta, "wb" vuelve a empezar el
+    archivo desde cero.
+    """
+    escritos = 0
+    # cliente.stream() no descarga el cuerpo al hacer la petición: se lee en el for
+    with cliente.stream("GET", ruta) as respuesta:
+        respuesta.raise_for_status()
+        with open(archivo, "wb") as f:
+            for trozo in respuesta.iter_bytes(chunk_size=TAMAÑO_TROZO):
+                f.write(trozo)
+                escritos += len(trozo)
+    return escritos
+
+
+def descargar_portada(
+    id_portada: int, destino: Path, transporte: httpx.BaseTransport | None = None
+) -> Path:
+    """Descarga la portada `id_portada` (tamaño grande) a `destino` por streaming.
+
+    Se escribe primero en un archivo `.part` y solo se renombra a `destino` si
+    la descarga terminó completa; si falla, no queda ningún archivo a medias.
+    Lanza ServicioExternoError si no se pudo descargar.
+    """
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    temporal = destino.with_name(destino.name + ".part")
+    log.info("Descargando portada %d a %s", id_portada, destino)
+
+    try:
+        with httpx.Client(
+            base_url=URL_PORTADAS,
+            headers=CABECERAS,
+            timeout=TIMEOUT_DESCARGA,
+            follow_redirects=True,  # la imagen real está alojada en archive.org
+            transport=transporte,
+        ) as cliente:
+            # /b/id/ en lugar de /b/isbn/: por ISBN, Open Library limita las consultas
+            escritos = _descargar_a_archivo(cliente, f"/b/id/{id_portada}-L.jpg", temporal)
+        temporal.replace(destino)  # solo llega aquí si la descarga terminó
+    except httpx.HTTPError as e:
+        raise ServicioExternoError(f"No se pudo descargar la portada: {e}") from e
+    except OSError as e:  # disco lleno, sin permisos en la carpeta, etc.
+        raise ServicioExternoError(f"No se pudo guardar la portada: {e}") from e
+    finally:
+        temporal.unlink(missing_ok=True)  # si falló, borra el archivo a medias
+
+    log.info("Portada guardada: %s (%d bytes)", destino, escritos)
+    return destino

@@ -39,8 +39,12 @@ def _buscar_sugerencias(isbn: str) -> DatosISBN:
     return datos
 
 
-def capturar_libro(data: Libreria) -> dict[str, Any]:
-    """Solicita al usuario los datos de un nuevo libro por consola."""
+def capturar_libro(data: Libreria) -> tuple[dict[str, Any], int | None]:
+    """Solicita al usuario los datos de un nuevo libro por consola.
+
+    Devuelve el diccionario del libro y el id de su portada en Open Library
+    (None si no se encontró). La portada no forma parte del modelo Libro.
+    """
     print("\n📖 Nuevo libro")
     print("-" * 40)
 
@@ -94,7 +98,7 @@ def capturar_libro(data: Libreria) -> dict[str, Any]:
 
     editorial = _pedir_texto("Editorial", sugerencia.editorial)
 
-    return {
+    libro: dict[str, Any] = {
         "isbn": isbn,
         "titulo": titulo,
         "autor": {"nombre": nombre_autor, "nacionalidad": nacionalidad_autor},
@@ -105,6 +109,7 @@ def capturar_libro(data: Libreria) -> dict[str, Any]:
         "cantidad_disponible": cantidad,
         "editorial": editorial,
     }
+    return libro, sugerencia.id_portada
 
 
 def capturar_filtros(data: Libreria) -> list[Libro]:
