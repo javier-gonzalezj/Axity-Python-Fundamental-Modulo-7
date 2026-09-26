@@ -1,0 +1,60 @@
+[project]
+name = "libreria-m7"
+version = "0.1.0"
+description = "Programa de administracion de mi libreria. Python Fundamental Modulo 7"
+authors = [
+    {name = "javier-gonzalezj",email = "jgjeronimo@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic (>=2.13.5,<3.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "libreria_m7", from = "src"}]
+
+[tool.poetry.scripts]
+libreria = "libreria_m7.main:main"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (orden de imports)
+    "UP",  # pyupgrade (sintaxis moderna)
+    "B",   # flake8-bugbear (errores comunes)
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["libreria_m7"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src"]
+strict = true
+plugins = ["pydantic.mypy"]   # mypy entiende mejor los modelos de pydantic
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.16.9,<0.17.0)",
+    "mypy (>=2.3.1,<3.0.0)",
+    "pre-commit (>=4.6.2,<5.0.0)"
+]
