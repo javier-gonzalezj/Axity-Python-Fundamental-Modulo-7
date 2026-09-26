@@ -1,8 +1,8 @@
-# Librería M7
+# Proyecto: Librería
 
 Programa de consola para administrar el catálogo de una librería: consultar, filtrar, agregar e importar libros, guardados en un archivo JSON.
 
-Proyecto del curso **Python Fundamental, Módulo 7**.
+Proyecto del curso **Axity Python Fundamental**.
 
 ## Características
 
