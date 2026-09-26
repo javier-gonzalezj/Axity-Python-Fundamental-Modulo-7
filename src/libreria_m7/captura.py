@@ -1,9 +1,42 @@
 """Captura de datos por consola: aquí viven los input() del programa."""
 
+import logging
 from typing import Any
 
+from libreria_m7.buscador import DatosISBN, buscar_por_isbn
 from libreria_m7.catalogo import filtrar_libros
+from libreria_m7.excepciones import ServicioExternoError
 from libreria_m7.modelos import Libreria, Libro
+
+log = logging.getLogger(__name__)
+
+
+def _pedir_texto(etiqueta: str, sugerencia: str = "") -> str:
+    """Pide un texto por consola. Si hay sugerencia, se muestra entre corchetes
+    y basta con presionar Enter para aceptarla.
+    """
+    if sugerencia:
+        return input(f"{etiqueta} [{sugerencia}]: ").strip() or sugerencia
+    return input(f"{etiqueta}: ").strip()
+
+
+def _buscar_sugerencias(isbn: str) -> DatosISBN:
+    """Consulta el ISBN en Open Library. Si no hay datos, devuelve sugerencias vacías."""
+    print("  🔎 Buscando el ISBN en Open Library...")
+    try:
+        datos = buscar_por_isbn(isbn)
+    except ServicioExternoError as e:
+        # log.warning también sale en consola (ver registro.py)
+        log.warning("%s. Continúa con la captura manual.", e)
+        return DatosISBN()
+
+    if datos is None:
+        print("  ℹ️  No se encontró en Open Library; captura los datos manualmente.")
+        return DatosISBN()
+
+    print(f"  ✅ Encontrado: {datos.titulo} — {datos.autor}")
+    print("     Presiona Enter para aceptar el valor entre [corchetes] o escribe otro.")
+    return datos
 
 
 def capturar_libro(data: Libreria) -> dict[str, Any]:
@@ -22,16 +55,19 @@ def capturar_libro(data: Libreria) -> dict[str, Any]:
             continue
         break
 
-    titulo = input("Título: ").strip()
-    nombre_autor = input("Nombre del autor: ").strip()
+    sugerencia = _buscar_sugerencias(isbn)
+
+    titulo = _pedir_texto("Título", sugerencia.titulo)
+    nombre_autor = _pedir_texto("Nombre del autor", sugerencia.autor)
     nacionalidad_autor = input("Nacionalidad del autor: ").strip()
 
-    generos_texto = input("Género(s) (separados por coma): ").strip()
+    generos_texto = _pedir_texto("Género(s) (separados por coma)", ", ".join(sugerencia.generos))
     generos = [g.strip() for g in generos_texto.split(",") if g.strip()]
 
+    año_sugerido = str(sugerencia.año_publicacion or "")
     while True:
         try:
-            año = int(input("Año de publicación: ").strip())
+            año = int(_pedir_texto("Año de publicación", año_sugerido))
             break
         except ValueError:
             print("  ⚠️  Ingresa un número válido para el año.")
@@ -56,7 +92,7 @@ def capturar_libro(data: Libreria) -> dict[str, Any]:
         except ValueError:
             print("  ⚠️  Ingresa un número entero válido.")
 
-    editorial = input("Editorial: ").strip()
+    editorial = _pedir_texto("Editorial", sugerencia.editorial)
 
     return {
         "isbn": isbn,

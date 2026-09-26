@@ -124,6 +124,40 @@
       "en_stock": true,
       "cantidad_disponible": 1,
       "editorial": "Alfaguara"
+    },
+    {
+      "isbn": "9780307474728",
+      "titulo": "Cien años de soledad",
+      "autor": {
+        "nombre": "Gabriel García Márquez",
+        "nacionalidad": "Colombiana"
+      },
+      "genero": [
+        "Ficción",
+        "Realismo Mágico"
+      ],
+      "año_publicacion": 2009,
+      "precio": 1454.0,
+      "en_stock": true,
+      "cantidad_disponible": 1,
+      "editorial": "Alfaguara"
+    },
+    {
+      "isbn": "9780151660346",
+      "titulo": "1984",
+      "autor": {
+        "nombre": "George Orwell",
+        "nacionalidad": "Estadounidense"
+      },
+      "genero": [
+        "Ficción",
+        "Novela"
+      ],
+      "año_publicacion": 1984,
+      "precio": 450.0,
+      "en_stock": true,
+      "cantidad_disponible": 2,
+      "editorial": "Harcourt, Brace, Jovanovich"
     }
   ]
 }

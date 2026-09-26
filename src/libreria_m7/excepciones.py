@@ -24,3 +24,7 @@ class CodificacionArchivoError(LibreriaError):
 
 class LibroInvalidoError(LibreriaError):
     """Se lanza cuando un diccionario de libro no cumple con la estructura esperada."""
+
+
+class ServicioExternoError(LibreriaError):
+    """Se lanza cuando no se puede consultar un servicio de internet (p. ej. Open Library)."""
